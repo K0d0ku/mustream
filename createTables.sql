@@ -420,7 +420,7 @@ BEGIN
     IF v_total_payment IS NULL THEN
         RAISE EXCEPTION 'No payment record found for date %', p_payment_date;
     END IF;
-
+--
     -- Get the total number of monthly listeners across all active creators
     SELECT COALESCE(SUM(a.monthly_listener_count), 0) INTO v_total_listeners
     FROM mustream_schm.artists a
