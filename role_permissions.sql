@@ -23,9 +23,9 @@ allow only select, insert update in songs, and only allow to delete a row that i
 allow only select: users*/
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM creator;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM creator;
-REVOKE ALL ON TABLE mustream_schm.ad_logs, mustream_schm.ads, mustream_schm.creator_payments, mustream_schm.developer_payments,
+REVOKE ALL ON TABLE mustream_schm.ad_logs, mustream_schm.ads, /*mustream_schm.creator_payments, mustream_schm.developer_payments,
     mustream_schm.developer_users, mustream_schm.management_payments, mustream_schm.management_users,
-    mustream_schm.payment_logs, mustream_schm.payments, mustream_schm.subscription, mustream_schm.subscription_plans
+    mustream_schm.payment_logs, mustream_schm.payments, mustream_schm.subscription,*/ mustream_schm.subscription_plans
 FROM creator;
 GRANT SELECT ON mustream_schm.artists, mustream_schm.users TO creator;
 GRANT SELECT, INSERT, UPDATE ON mustream_schm.songs TO creator;
