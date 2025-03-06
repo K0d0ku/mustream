@@ -2,6 +2,7 @@
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA mustream_schm TO developer;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA mustream_schm TO developer;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA mustream_schm TO developer;
+grant usage on schema mustream_schm to developer;
 
 /*management permissions -
   allow: read, update, insert
@@ -14,6 +15,7 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA mustream_schm TO management;
 REVOKE DELETE ON ALL TABLES IN SCHEMA mustream_schm FROM management;
 REVOKE CREATE ON SCHEMA mustream_schm FROM management;
 REVOKE TRUNCATE ON ALL TABLES IN SCHEMA mustream_schm FROM management;
+grant usage on schema mustream_schm to management;
 
 /*creator permissions -
   restrictions:
@@ -31,16 +33,55 @@ FROM creator;
 GRANT SELECT ON mustream_schm.artists, mustream_schm.users TO creator;
 GRANT SELECT, INSERT, UPDATE ON mustream_schm.songs TO creator;
 ALTER TABLE mustream_schm.songs ENABLE ROW LEVEL SECURITY;
+GRANT USAGE, SELECT ON SEQUENCE mustream_schm.songs_song_id_seq TO creator;
+
+-- DROP POLICY IF EXISTS creator_delete_own_songs ON mustream_schm.songs;
+-- DROP POLICY IF EXISTS creator_insert_songs ON mustream_schm.songs;
+-- DROP POLICY IF EXISTS creator_select_songs ON mustream_schm.songs;
+-- DROP POLICY IF EXISTS creator_update_songs ON mustream_schm.songs;
+
+CREATE OR REPLACE FUNCTION mustream_schm.set_current_user_id(p_user_id INTEGER) RETURNS VOID AS $$
+BEGIN
+  PERFORM set_config('mustream.current_user_id', p_user_id::TEXT, FALSE);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE POLICY creator_insert_songs
+ON mustream_schm.songs
+FOR INSERT TO creator
+WITH CHECK (
+    artist_id IN (
+        SELECT artist_id FROM mustream_schm.artists
+        WHERE user_id = current_setting('mustream.current_user_id')::INTEGER
+    )
+);
 
 CREATE POLICY creator_delete_own_songs
 ON mustream_schm.songs
-FOR DELETE
+FOR DELETE TO creator
 USING (
     artist_id IN (
         SELECT artist_id FROM mustream_schm.artists
-        WHERE user_id = current_user::INT
+        WHERE user_id = current_setting('mustream.current_user_id')::INTEGER
     )
 );
+
+CREATE POLICY creator_select_songs
+ON mustream_schm.songs
+FOR SELECT TO creator
+USING (true);  -- Allow creators to see all songs
+
+CREATE POLICY creator_update_songs
+ON mustream_schm.songs
+FOR UPDATE TO creator
+USING (
+    artist_id IN (
+        SELECT artist_id FROM mustream_schm.artists
+        WHERE user_id = current_setting('mustream.current_user_id')::INTEGER
+    )
+);
+
+grant usage on schema mustream_schm to creator;
 
 /* listener permissions - allow select on: subscription, subscription plans, songs, artists
 and on the rest restrict any form of access*/
@@ -56,3 +97,5 @@ FOR UPDATE
 USING (user_id = current_setting('app.current_user_id')::INT);
 
 GRANT UPDATE (plan_name) ON mustream_schm.subscription TO listener;
+grant usage on schema mustream_schm to listener;
+GRANT USAGE, SELECT, UPDATE ON SEQUENCE mustream_schm.subscription_subscription_id_seq to listener;

@@ -1,0 +1,14 @@
+-- -- Add a new subscription plan
+-- INSERT INTO mustream_schm.subscription_plans (plan_name, price, duration_days)
+-- VALUES ('Premium+', 14.99, 30);
+--
+-- -- Update the price of a subscription plan
+-- UPDATE mustream_schm.subscription_plans
+-- SET price = 12.99
+-- WHERE plan_name = 'Premium';
+--
+-- -- Select details of all songs
+-- SELECT * FROM mustream_schm.songs;
+--
+-- -- Attempting DELETE will fail
+-- DELETE FROM mustream_schm.subscription_plans WHERE plan_id = 3; -- ❌ Not allowed

@@ -1,0 +1,13 @@
+-- -- View available subscription plans
+-- SELECT * FROM mustream_schm.subscription_plans;
+--
+-- -- View songs in the catalog
+-- SELECT title, artist_id, genre FROM mustream_schm.songs;
+--
+-- -- Attempt to change subscription plan (Allowed only for their own row)
+-- UPDATE mustream_schm.subscription
+-- SET plan_name = 'Premium'
+-- WHERE user_id = current_setting('app.current_user_id')::INT;
+--
+-- -- Attempting to delete a song (Not Allowed)
+-- DELETE FROM mustream_schm.songs WHERE song_id = 5; -- ❌ Not allowed
