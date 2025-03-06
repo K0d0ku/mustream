@@ -23,9 +23,10 @@ allow only select, insert update in songs, and only allow to delete a row that i
 allow only select: users*/
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM creator;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM creator;
-REVOKE ALL ON TABLE mustream_schm.ad_logs, mustream_schm.ads, /*mustream_schm.creator_payments, mustream_schm.developer_payments,
-    mustream_schm.developer_users, mustream_schm.management_payments, mustream_schm.management_users,
-    mustream_schm.payment_logs, mustream_schm.payments, mustream_schm.subscription,*/ mustream_schm.subscription_plans
+REVOKE ALL ON TABLE mustream_schm.ad_logs, mustream_schm.ads, mustream_schm.artist_payments, mustream_schm.developer_payments_view,
+    mustream_schm.management_payments_view, mustream_schm.payment_records, mustream_schm.payment_distribution, mustream_schm.subscription,
+    mustream_schm.subscription_plans, mustream_schm.artist_detailed_payments_view, mustream_schm.artist_discography,
+    mustream_schm.payment_summary_view, mustream_schm.genres
 FROM creator;
 GRANT SELECT ON mustream_schm.artists, mustream_schm.users TO creator;
 GRANT SELECT, INSERT, UPDATE ON mustream_schm.songs TO creator;
@@ -46,3 +47,12 @@ and on the rest restrict any form of access*/
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM listener;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM listener;
 GRANT SELECT ON mustream_schm.subscription, mustream_schm.subscription_plans, mustream_schm.songs, mustream_schm.artists TO listener;
+
+ALTER TABLE mustream_schm.subscription ENABLE ROW LEVEL SECURITY;
+-- create a policy to allow a listener to update only their own subscription
+CREATE POLICY listener_update_own_subscription
+ON mustream_schm.subscription
+FOR UPDATE
+USING (user_id = current_setting('app.current_user_id')::INT);
+
+GRANT UPDATE (plan_name) ON mustream_schm.subscription TO listener;

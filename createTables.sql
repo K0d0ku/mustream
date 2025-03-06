@@ -21,7 +21,7 @@ CREATE TABLE mustream_schm.songs (
     song_id SERIAL PRIMARY KEY,
     artist_id INT NOT NULL,
     song_name TEXT NOT NULL,
-    genre TEXT NOT NULL,
+--     genre TEXT NOT NULL, -- dropped since it is is own table now
     listeners_count INT DEFAULT 0,
     date_created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     copyright_owner TEXT,
@@ -211,3 +211,39 @@ SELECT mustream_schm.generate_artist_payments('2025-02-01');
 
 -- View all payment information
 SELECT * FROM mustream_schm.payment_summary_view WHERE month = '2025-02-01';
+
+
+/*new addition tables*/
+
+CREATE TABLE mustream_schm.genres (
+    genre_id SERIAL PRIMARY KEY,
+    genre_name TEXT UNIQUE NOT NULL
+);
+
+-- -- updated the songs table to reference the genre from the genre table
+-- ALTER TABLE mustream_schm.songs
+-- /*DROP COLUMN genre,*/
+-- ADD COLUMN genre_id INT,
+-- ADD CONSTRAINT fk_song_genre FOREIGN KEY (genre_id) REFERENCES mustream_schm.genres(genre_id) ON DELETE SET NULL;
+
+CREATE VIEW mustream_schm.artist_discography AS
+SELECT
+    a.artist_id,
+    a.artist_name,
+    a.real_name,
+    a.joined_date,
+    u.user_id,
+    u.username,
+    u.email,
+    s.song_id,
+    s.song_name,
+    g.genre_name,
+    s.listeners_count,
+    s.date_created,
+    s.copyright_owner
+FROM mustream_schm.artists a
+JOIN mustream_schm.users u ON a.user_id = u.user_id
+LEFT JOIN mustream_schm.songs s ON a.artist_id = s.artist_id
+LEFT JOIN mustream_schm.genres g ON s.genre_id = g.genre_id;
+/*Execute*/
+/*SELECT * FROM mustream_schm.artist_discography WHERE artist_name = 'DJ Creator1';*/
