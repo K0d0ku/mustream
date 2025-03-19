@@ -85,20 +85,16 @@ CREATE TABLE mustream_schm.payment_distribution (
     revenue_id INT NOT NULL,
     month DATE NOT NULL,
 
-    -- Revenue breakdown
     ad_revenue DECIMAL(15,2) NOT NULL,
     subscription_revenue DECIMAL(15,2) NOT NULL,
     total_revenue DECIMAL(15,2) NOT NULL,
 
-    -- Developer payment: 40% of total revenue + 50% of remaining subscription revenue
     developer_payment DECIMAL(15,2) GENERATED ALWAYS AS
         ((total_revenue * 0.4) + (subscription_revenue * 0.5)) STORED,
 
-    -- Management payment: 40% of total revenue + 50% of remaining ad revenue
     management_payment DECIMAL(15,2) GENERATED ALWAYS AS
         ((total_revenue * 0.4) + (ad_revenue * 0.5)) STORED,
 
-    -- Artist payment: 20% of total revenue + $5 per 200 monthly listeners
     artist_base_payment DECIMAL(15,2) GENERATED ALWAYS AS
         (total_revenue * 0.2) STORED,
 
@@ -117,14 +113,11 @@ CREATE TABLE mustream_schm.artist_payments (
     month DATE NOT NULL,
     monthly_listeners INT NOT NULL,
 
-    -- Base payment from the total pool (divided among artists)
     base_payment_share DECIMAL(15,2) NOT NULL,
 
-    -- Additional payment based on listeners: $5 per 200 listeners
     listener_payment DECIMAL(15,2) GENERATED ALWAYS AS
         ((monthly_listeners::numeric / 200) * 5.00) STORED,
 
-    -- Total payment to artist
     total_payment DECIMAL(15,2) GENERATED ALWAYS AS
         (base_payment_share + ((monthly_listeners::numeric / 200) * 5.00)) STORED,
 
@@ -165,7 +158,6 @@ DECLARE
     r_artist RECORD;
     v_artist_count INT;
 BEGIN
-    -- Get the distribution ID for the given month
     SELECT distribution_id, artist_base_payment INTO v_distribution_id, v_artist_base_payment
     FROM mustream_schm.payment_distribution
     WHERE month = payment_month;
@@ -174,17 +166,14 @@ BEGIN
         RAISE EXCEPTION 'No payment distribution found for month %', payment_month;
     END IF;
 
-    -- Count the number of active artists
     SELECT COUNT(*) INTO v_artist_count FROM mustream_schm.artists;
 
-    -- Calculate individual base payment share
     IF v_artist_count > 0 THEN
         v_artist_base_payment := v_artist_base_payment / v_artist_count;
     ELSE
         v_artist_base_payment := 0;
     END IF;
 
-    -- Insert payment records for each artist
     FOR r_artist IN SELECT artist_id, monthly_listener_count FROM mustream_schm.artists LOOP
         INSERT INTO mustream_schm.artist_payments (
             distribution_id, artist_id, month, monthly_listeners, base_payment_share
@@ -246,4 +235,4 @@ JOIN mustream_schm.users u ON a.user_id = u.user_id
 LEFT JOIN mustream_schm.songs s ON a.artist_id = s.artist_id
 LEFT JOIN mustream_schm.genres g ON s.genre_id = g.genre_id;
 /*Execute*/
-/*SELECT * FROM mustream_schm.artist_discography WHERE artist_name = 'DJ Creator1';*/
+SELECT * FROM mustream_schm.artist_discography WHERE artist_name = 'DJ Creator1';

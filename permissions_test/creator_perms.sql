@@ -2,7 +2,7 @@
 -- Insert a new song (Allowed)
 INSERT INTO mustream_schm.songs (artist_id, song_name, genre_id, listeners_count, date_created, copyright_owner)
 VALUES
-    ((SELECT artist_id FROM mustream_schm.artists WHERE artist_name = 'IndieSoul10'), 'We were good', 6, 8000, DEFAULT, 'ElectroBeats Records');
+    ((SELECT artist_id FROM mustream_schm.artists WHERE artist_name = 'IndieSoul10'), 'cascade', 6, 8000, DEFAULT, 'Warning sisters');
 
 -- Update song details (Allowed)
 UPDATE mustream_schm.songs
@@ -19,4 +19,4 @@ WHERE song_id = 7;
 SELECT * FROM mustream_schm.artists;
 
 -- Attempting access to payment records (Not Allowed)
-SELECT * FROM mustream_schm.payment_records; -- ❌ Not allowed
+SELECT * FROM mustream_schm.payment_records;
