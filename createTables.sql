@@ -65,8 +65,6 @@ CREATE TABLE mustream_schm.subscription (
     CONSTRAINT fk_subscription_plan_name FOREIGN KEY (plan_name) REFERENCES subscription_plans(plan_name) ON DELETE CASCADE
 );
 
--- TODO - to create a payments system to show the revenue from ads and subscriptions, and split the payments to devs management and creators
-
 -- Revenue tracking table
 CREATE TABLE mustream_schm.revenue_tracking (
     revenue_id SERIAL PRIMARY KEY,
@@ -104,6 +102,12 @@ CREATE TABLE mustream_schm.payment_distribution (
     CONSTRAINT fk_payment_revenue FOREIGN KEY (revenue_id)
         REFERENCES mustream_schm.revenue_tracking(revenue_id) ON DELETE CASCADE
 );
+-- rollback ;
+-- delete from mustream_schm.payment_distribution
+-- where distribution_id between 2 and 3;
+ALTER TABLE mustream_schm.payment_distribution
+ADD CONSTRAINT unique_month_in_distribution UNIQUE (month);
+
 
 -- Artist payment tracking (for the $5 per 200 monthly listeners part)
 CREATE TABLE mustream_schm.artist_payments (
@@ -130,6 +134,10 @@ CREATE TABLE mustream_schm.artist_payments (
         REFERENCES mustream_schm.artists(artist_id) ON DELETE CASCADE
 );
 
+-- rollback ;
+-- ALTER TABLE mustream_schm.artist_payments
+-- ADD CONSTRAINT unique_artist_month UNIQUE (artist_id, month);
+
 -- View to see all payment information at once
 CREATE OR REPLACE VIEW mustream_schm.payment_summary_view AS
 SELECT
@@ -149,7 +157,66 @@ FROM
 JOIN
     mustream_schm.payment_distribution pd ON rt.revenue_id = pd.revenue_id;
 
--- Create a function to generate artist payments for a given month
+/*Procedure*/
+-- this procedure creates a function to generate artist payments for a given month
+
+CREATE OR REPLACE PROCEDURE mustream_schm.generate_all_payments_proc(payment_month DATE)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- Step 1: Insert into payment_distribution from revenue_tracking
+    -- Only insert if not already exists
+    INSERT INTO mustream_schm.payment_distribution (
+        revenue_id, month, ad_revenue, subscription_revenue, total_revenue
+    )
+    SELECT revenue_id, month, ad_revenue, subscription_revenue, total_revenue
+    FROM mustream_schm.revenue_tracking
+    WHERE month = payment_month
+    ON CONFLICT (month) DO NOTHING; -- Prevent duplicate entries
+
+    -- Step 2: Generate artist payments (this also calculates the payment based on distribution)
+    PERFORM mustream_schm.generate_artist_payments(payment_month);
+
+    -- Step 3: Insert into payment_records for developers
+    INSERT INTO mustream_schm.payment_records (user_id, role, month, payment_amount)
+    SELECT user_id, 'developer', month, individual_payment
+    FROM mustream_schm.developer_payments_view
+    WHERE month = payment_month
+    ON CONFLICT (user_id, month)
+    DO UPDATE SET payment_amount = EXCLUDED.payment_amount;
+
+    -- Step 4: Insert into payment_records for management
+    INSERT INTO mustream_schm.payment_records (user_id, role, month, payment_amount)
+    SELECT user_id, 'management', month, individual_payment
+    FROM mustream_schm.management_payments_view
+    WHERE month = payment_month
+    ON CONFLICT (user_id, month)
+    DO UPDATE SET payment_amount = EXCLUDED.payment_amount;
+
+    -- Step 5: Insert into payment_records for artists
+    INSERT INTO mustream_schm.payment_records (user_id, role, month, payment_amount)
+    SELECT user_id, 'artist', month, total_payment
+    FROM mustream_schm.artist_detailed_payments_view
+    WHERE month = payment_month
+    ON CONFLICT (user_id, month)
+    DO UPDATE SET payment_amount = EXCLUDED.payment_amount;
+
+    -- Log the payment generation
+    INSERT INTO mustream_schm.payment_audit_log (event_type, event_data)
+    VALUES ('payment_generation', jsonb_build_object('month', payment_month));
+
+END;
+$$;
+
+
+/*execute*/
+BEGIN;
+INSERT INTO mustream_schm.revenue_tracking (month, ad_revenue, subscription_revenue)
+VALUES ('2025-04-17', 10000.00, 8000.00);
+
+CALL mustream_schm.generate_all_payments_proc('2025-04-17');
+COMMIT;/*transaction*/
+
 CREATE OR REPLACE FUNCTION mustream_schm.generate_artist_payments(payment_month DATE)
 RETURNS VOID AS $$
 DECLARE
@@ -157,7 +224,9 @@ DECLARE
     v_artist_base_payment DECIMAL(15,2);
     r_artist RECORD;
     v_artist_count INT;
+    v_total_revenue DECIMAL(15,2);
 BEGIN
+    -- Get distribution info for the provided month
     SELECT distribution_id, artist_base_payment INTO v_distribution_id, v_artist_base_payment
     FROM mustream_schm.payment_distribution
     WHERE month = payment_month;
@@ -166,6 +235,7 @@ BEGIN
         RAISE EXCEPTION 'No payment distribution found for month %', payment_month;
     END IF;
 
+    -- Count the number of artists
     SELECT COUNT(*) INTO v_artist_count FROM mustream_schm.artists;
 
     IF v_artist_count > 0 THEN
@@ -174,46 +244,76 @@ BEGIN
         v_artist_base_payment := 0;
     END IF;
 
-    FOR r_artist IN SELECT artist_id, monthly_listener_count FROM mustream_schm.artists LOOP
+    -- Loop through all artists and calculate payments
+    -- Fix: The error occurs because monthly_listener_count is an INT, not TEXT
+    FOR r_artist IN
+    SELECT artist_id, monthly_listener_count
+    FROM mustream_schm.artists
+    WHERE monthly_listener_count IS NOT NULL  -- Just check if it's not null, no regex needed for INT
+    LOOP
         INSERT INTO mustream_schm.artist_payments (
             distribution_id, artist_id, month, monthly_listeners, base_payment_share
         ) VALUES (
-            v_distribution_id, r_artist.artist_id, payment_month, r_artist.monthly_listener_count, v_artist_base_payment
-        );
+            v_distribution_id, r_artist.artist_id, payment_month,
+            r_artist.monthly_listener_count, v_artist_base_payment
+        )
+        ON CONFLICT (artist_id, month)
+        DO UPDATE SET
+            base_payment_share = EXCLUDED.base_payment_share,
+            monthly_listeners = EXCLUDED.monthly_listeners;
     END LOOP;
+
 END;
 $$ LANGUAGE plpgsql;
 
--- First, record revenue for a month
-INSERT INTO mustream_schm.revenue_tracking (month, ad_revenue, subscription_revenue)
-VALUES ('2025-02-01', 10000.00, 8000.00);
+CREATE TABLE mustream_schm.payment_audit_log (
+    log_id SERIAL PRIMARY KEY,
+    event_type TEXT,
+    event_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    event_data JSONB
+);
 
--- Then create the payment distribution record
-INSERT INTO mustream_schm.payment_distribution
-(revenue_id, month, ad_revenue, subscription_revenue, total_revenue)
-SELECT revenue_id, month, ad_revenue, subscription_revenue, total_revenue
-FROM mustream_schm.revenue_tracking
-WHERE month = '2025-02-01';
+CREATE TRIGGER revenue_tracking_insert_trigger
+AFTER INSERT ON mustream_schm.revenue_tracking
+FOR EACH ROW
+EXECUTE FUNCTION mustream_schm.revenue_insert_trigger_func();
 
--- Generate artist payments automatically
-SELECT mustream_schm.generate_artist_payments('2025-02-01');
+CREATE OR REPLACE FUNCTION mustream_schm.revenue_insert_trigger_func()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_month DATE;
+BEGIN
+    v_month := NEW.month;
 
--- View all payment information
-SELECT * FROM mustream_schm.payment_summary_view WHERE month = '2025-02-01';
+    -- Step 1: Insert payment distribution from revenue_tracking
+    INSERT INTO mustream_schm.payment_distribution (revenue_id, month, ad_revenue, subscription_revenue, total_revenue)
+    SELECT revenue_id, month, ad_revenue, subscription_revenue, total_revenue
+    FROM mustream_schm.revenue_tracking
+    WHERE month = NEW.month
+    ON CONFLICT (month) DO NOTHING;
+
+
+    -- Step 2: Generate artist payments (calculate based on distribution)
+    PERFORM mustream_schm.generate_artist_payments(v_month);
+
+    -- Step 3: Call procedure to generate all payments (devs, mgmt, artists)
+    CALL mustream_schm.generate_all_payments_proc(NEW.month);
+
+    -- Optionally log for auditing purposes
+    INSERT INTO mustream_schm.payment_audit_log (event_type, event_data)
+    VALUES ('payment_generation', jsonb_build_object('month', v_month));
+
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
 
 
 /*new addition tables*/
-
 CREATE TABLE mustream_schm.genres (
     genre_id SERIAL PRIMARY KEY,
     genre_name TEXT UNIQUE NOT NULL
 );
-
--- -- updated the songs table to reference the genre from the genre table
--- ALTER TABLE mustream_schm.songs
--- /*DROP COLUMN genre,*/
--- ADD COLUMN genre_id INT,
--- ADD CONSTRAINT fk_song_genre FOREIGN KEY (genre_id) REFERENCES mustream_schm.genres(genre_id) ON DELETE SET NULL;
 
 CREATE VIEW mustream_schm.artist_discography AS
 SELECT
@@ -235,4 +335,110 @@ JOIN mustream_schm.users u ON a.user_id = u.user_id
 LEFT JOIN mustream_schm.songs s ON a.artist_id = s.artist_id
 LEFT JOIN mustream_schm.genres g ON s.genre_id = g.genre_id;
 /*Execute*/
-SELECT * FROM mustream_schm.artist_discography WHERE artist_name = 'DJ Creator1';
+-- SELECT * FROM mustream_schm.artist_discography WHERE artist_name = 'DJ Creator1';
+
+
+-- procedure to automate stuff:
+
+/*procedure 1 to automate the artist discography*/
+CREATE TABLE mustream_schm.artist_view_log (
+    id SERIAL PRIMARY KEY,
+    artist_name TEXT NOT NULL,
+    view_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+-- create a view to store all info but upon calling a procedure the info will change to the one that is desired
+CREATE OR REPLACE VIEW mustream_schm.artist_discography_view AS
+SELECT
+    a.artist_id,
+    a.artist_name,
+    a.real_name,
+    a.joined_date,
+    u.user_id,
+    u.username,
+    u.email,
+    s.song_id,
+    s.song_name,
+    g.genre_name,
+    s.listeners_count,
+    s.date_created,
+    s.copyright_owner
+FROM mustream_schm.artists a
+JOIN mustream_schm.users u ON a.user_id = u.user_id
+LEFT JOIN mustream_schm.songs s ON a.artist_id = s.artist_id
+LEFT JOIN mustream_schm.genres g ON s.genre_id = g.genre_id;
+
+
+-- then create a procedure that sets a session variable and displays results
+CREATE OR REPLACE PROCEDURE mustream_schm.get_artist_discography_proc(
+    IN artist_name_param TEXT,
+    OUT record_count INTEGER
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    INSERT INTO mustream_schm.artist_view_log (artist_name)
+    VALUES (artist_name_param);
+
+    CREATE TEMP TABLE IF NOT EXISTS temp_discography AS
+    SELECT * FROM mustream_schm.artist_discography_view WHERE FALSE;
+    TRUNCATE TABLE temp_discography;
+    INSERT INTO temp_discography
+    SELECT * FROM mustream_schm.artist_discography_view
+    WHERE artist_name = artist_name_param;
+
+    SELECT COUNT(*) INTO record_count FROM temp_discography;
+
+    IF record_count = 0 THEN
+        RAISE NOTICE 'No discography found for artist: %', artist_name_param;
+    ELSE
+        RAISE NOTICE 'Found % records for artist: %', record_count, artist_name_param;
+        RAISE NOTICE 'Run: SELECT * FROM temp_discography;';
+    END IF;
+END;
+$$;
+/*execute*/
+BEGIN;
+CALL mustream_schm.get_artist_discography_proc('BeatsByC2', record_count := NULL);
+-- CALL mustream_schm.get_artist_discography_proc('SynthLord6', record_count := NULL);
+-- CALL mustream_schm.get_artist_discography_proc('THE WaveMaker', record_count := NULL);
+COMMIT; /*transaction*/
+/*this will give an error but dont worry it is working as intended cause
+  its temporary thats why ide is not able to find its origin*/
+SELECT * FROM temp_discography;
+
+
+-- triggers
+
+/*trigger 1 upon checking an artist this trigger adds +10 views to the ads in ad_logs*/
+/*row level trigger*/
+CREATE TRIGGER bump_ad_views_on_artist_check
+AFTER INSERT ON mustream_schm.artist_view_log
+FOR EACH ROW
+EXECUTE FUNCTION mustream_schm.bump_random_ad_view_trigger();
+
+CREATE OR REPLACE FUNCTION mustream_schm.bump_random_ad_view_trigger()
+RETURNS TRIGGER AS $$
+DECLARE
+    random_ad_id INT;
+BEGIN
+    SELECT ad_id INTO random_ad_id
+    FROM mustream_schm.ads
+    ORDER BY RANDOM()
+    LIMIT 1;
+
+    IF random_ad_id IS NOT NULL THEN
+        UPDATE mustream_schm.ad_logs
+        SET views = views + 10,
+            log_date = CURRENT_TIMESTAMP
+        WHERE ad_id = random_ad_id;
+
+        IF NOT FOUND THEN
+            INSERT INTO mustream_schm.ad_logs (ad_id, views, log_date)
+            VALUES (random_ad_id, 10, CURRENT_TIMESTAMP);
+        END IF;
+    END IF;
+
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+

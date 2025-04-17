@@ -1,4 +1,3 @@
--- Fixed Developer payments view
 CREATE OR REPLACE VIEW mustream_schm.developer_payments_view AS
 WITH dev_count AS (
     SELECT COUNT(*) as total_devs
@@ -29,7 +28,6 @@ WHERE
 ORDER BY
     pd.month DESC, u.username;
 
--- Fixed Management team payments view
 CREATE OR REPLACE VIEW mustream_schm.management_payments_view AS
 WITH mgmt_count AS (
     SELECT COUNT(*) as total_mgmt
@@ -60,7 +58,6 @@ WHERE
 ORDER BY
     pd.month DESC, u.username;
 
--- Fixed Artist payments view
 CREATE OR REPLACE VIEW mustream_schm.artist_detailed_payments_view AS
 WITH latest_distributions AS (
     SELECT DISTINCT ON (month) *
@@ -90,17 +87,14 @@ SELECT
     al.monthly_listener_count,
     al.month,
 
-    -- Base payment calculation - proportional to listener count
     CASE
         WHEN al.total_listeners > 0
         THEN (al.monthly_listener_count::numeric / al.total_listeners) * al.artist_base_payment
         ELSE 0
     END AS base_payment_share,
 
-    -- Listener bonus payment ($5 per 200 listeners)
     (al.monthly_listener_count::numeric / 200) * 5.00 AS listener_bonus_payment,
 
-    -- Total artist payment
     CASE
         WHEN al.total_listeners > 0
         THEN ((al.monthly_listener_count::numeric / al.total_listeners) * al.artist_base_payment) +
@@ -116,8 +110,6 @@ JOIN
 ORDER BY
     al.month DESC, total_payment DESC;
 
-
--- Summary table to store finalized payments (for record-keeping)
 CREATE TABLE mustream_schm.payment_records (
     payment_record_id SERIAL PRIMARY KEY,
     user_id INT NOT NULL,
@@ -130,15 +122,15 @@ CREATE TABLE mustream_schm.payment_records (
     CONSTRAINT fk_payment_record_user FOREIGN KEY (user_id)
         REFERENCES mustream_schm.users(user_id) ON DELETE CASCADE,
 
-    -- Unique constraint to prevent duplicate payments
     CONSTRAINT uq_user_month_payment UNIQUE (user_id, month)
 );
 
--- Function to generate all payments for a given month
+/*NOTE might not need it*/
+/*
+function
 CREATE OR REPLACE FUNCTION mustream_schm.generate_all_payments(payment_month DATE)
 RETURNS VOID AS $$
 BEGIN
-    -- Insert developer payments
     INSERT INTO mustream_schm.payment_records (user_id, role, month, payment_amount)
     SELECT
         user_id, 'developer', month, individual_payment
@@ -149,7 +141,6 @@ BEGIN
     ON CONFLICT (user_id, month)
     DO UPDATE SET payment_amount = EXCLUDED.payment_amount;
 
-    -- Insert management payments
     INSERT INTO mustream_schm.payment_records (user_id, role, month, payment_amount)
     SELECT
         user_id, 'management', month, individual_payment
@@ -160,7 +151,6 @@ BEGIN
     ON CONFLICT (user_id, month)
     DO UPDATE SET payment_amount = EXCLUDED.payment_amount;
 
-    -- Insert artist payments
     INSERT INTO mustream_schm.payment_records (user_id, role, month, payment_amount)
     SELECT
         user_id, 'artist', month, total_payment
@@ -175,8 +165,8 @@ END;
 $$ LANGUAGE plpgsql;
 
 
-/*EXECUTE*/
--- First, make sure you have revenue and payment distribution data for the month
+EXECUTE
+-- 1 make sure you have revenue and payment distribution data for the month
 INSERT INTO mustream_schm.revenue_tracking (month, ad_revenue, subscription_revenue)
 VALUES ('2025-02-01', 10000.00, 8000.00);
 
@@ -186,18 +176,38 @@ SELECT revenue_id, month, ad_revenue, subscription_revenue, total_revenue
 FROM mustream_schm.revenue_tracking
 WHERE month = '2025-02-01';
 
--- View payments for each role
+-- 2 view payments for each role
 SELECT * FROM mustream_schm.developer_payments_view WHERE month = '2025-02-01';
 SELECT * FROM mustream_schm.management_payments_view WHERE month = '2025-02-01';
 SELECT * FROM mustream_schm.artist_detailed_payments_view WHERE month = '2025-02-01';
 
--- Generate official payment records for all roles
+-- 3 generate official payment records for all roles
 SELECT mustream_schm.generate_all_payments('2025-02-01');
 
--- Check the payment records
+-- 4 check the payment records
 SELECT * FROM mustream_schm.payment_records WHERE month = '2025-02-01';
 
 
 SELECT mustream_schm.generate_all_payments('2025-02-01');
--- Check the payment records
+-- 5 check the payment records
 SELECT * FROM mustream_schm.payment_records WHERE month = '2025-02-01';
+
+
+
+-- First, record revenue for a month
+INSERT INTO mustream_schm.revenue_tracking (month, ad_revenue, subscription_revenue)
+VALUES ('2025-02-01', 10000.00, 8000.00);
+
+-- Then create the payment distribution record
+INSERT INTO mustream_schm.payment_distribution
+(revenue_id, month, ad_revenue, subscription_revenue, total_revenue)
+SELECT revenue_id, month, ad_revenue, subscription_revenue, total_revenue
+FROM mustream_schm.revenue_tracking
+WHERE month = '2025-02-01';
+
+-- Generate artist payments automatically
+SELECT mustream_schm.generate_artist_payments('2025-02-01');
+
+-- View all payment information
+SELECT * FROM mustream_schm.payment_summary_view WHERE month = '2025-02-01';
+*/
