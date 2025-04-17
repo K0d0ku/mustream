@@ -157,15 +157,13 @@ FROM
 JOIN
     mustream_schm.payment_distribution pd ON rt.revenue_id = pd.revenue_id;
 
-/*Procedure*/
+-- procedure to automate stuff:
 -- this procedure creates a function to generate artist payments for a given month
-
 CREATE OR REPLACE PROCEDURE mustream_schm.generate_all_payments_proc(payment_month DATE)
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    -- Step 1: Insert into payment_distribution from revenue_tracking
-    -- Only insert if not already exists
+    --1: insert into payment_distribution from revenue_tracking
     INSERT INTO mustream_schm.payment_distribution (
         revenue_id, month, ad_revenue, subscription_revenue, total_revenue
     )
@@ -174,10 +172,11 @@ BEGIN
     WHERE month = payment_month
     ON CONFLICT (month) DO NOTHING; -- Prevent duplicate entries
 
-    -- Step 2: Generate artist payments (this also calculates the payment based on distribution)
+    -- 2: generate artist payments (calculates the payment based on distribution)
     PERFORM mustream_schm.generate_artist_payments(payment_month);
 
-    -- Step 3: Insert into payment_records for developers
+    /*3: insert into payment_records by the roles,
+      for developers*/
     INSERT INTO mustream_schm.payment_records (user_id, role, month, payment_amount)
     SELECT user_id, 'developer', month, individual_payment
     FROM mustream_schm.developer_payments_view
@@ -185,7 +184,7 @@ BEGIN
     ON CONFLICT (user_id, month)
     DO UPDATE SET payment_amount = EXCLUDED.payment_amount;
 
-    -- Step 4: Insert into payment_records for management
+    -- management
     INSERT INTO mustream_schm.payment_records (user_id, role, month, payment_amount)
     SELECT user_id, 'management', month, individual_payment
     FROM mustream_schm.management_payments_view
@@ -193,7 +192,7 @@ BEGIN
     ON CONFLICT (user_id, month)
     DO UPDATE SET payment_amount = EXCLUDED.payment_amount;
 
-    -- Step 5: Insert into payment_records for artists
+    -- artists
     INSERT INTO mustream_schm.payment_records (user_id, role, month, payment_amount)
     SELECT user_id, 'artist', month, total_payment
     FROM mustream_schm.artist_detailed_payments_view
@@ -201,7 +200,7 @@ BEGIN
     ON CONFLICT (user_id, month)
     DO UPDATE SET payment_amount = EXCLUDED.payment_amount;
 
-    -- Log the payment generation
+    -- log the payment generation
     INSERT INTO mustream_schm.payment_audit_log (event_type, event_data)
     VALUES ('payment_generation', jsonb_build_object('month', payment_month));
 
@@ -226,7 +225,7 @@ DECLARE
     v_artist_count INT;
     v_total_revenue DECIMAL(15,2);
 BEGIN
-    -- Get distribution info for the provided month
+    -- get the distribution info on the month
     SELECT distribution_id, artist_base_payment INTO v_distribution_id, v_artist_base_payment
     FROM mustream_schm.payment_distribution
     WHERE month = payment_month;
@@ -235,7 +234,7 @@ BEGIN
         RAISE EXCEPTION 'No payment distribution found for month %', payment_month;
     END IF;
 
-    -- Count the number of artists
+    -- count the number of artists
     SELECT COUNT(*) INTO v_artist_count FROM mustream_schm.artists;
 
     IF v_artist_count > 0 THEN
@@ -244,12 +243,11 @@ BEGIN
         v_artist_base_payment := 0;
     END IF;
 
-    -- Loop through all artists and calculate payments
-    -- Fix: The error occurs because monthly_listener_count is an INT, not TEXT
+    -- loop through all artists and calculate payments
     FOR r_artist IN
     SELECT artist_id, monthly_listener_count
     FROM mustream_schm.artists
-    WHERE monthly_listener_count IS NOT NULL  -- Just check if it's not null, no regex needed for INT
+    WHERE monthly_listener_count IS NOT NULL
     LOOP
         INSERT INTO mustream_schm.artist_payments (
             distribution_id, artist_id, month, monthly_listeners, base_payment_share
@@ -285,7 +283,7 @@ DECLARE
 BEGIN
     v_month := NEW.month;
 
-    -- Step 1: Insert payment distribution from revenue_tracking
+    --  1: insert payment distribution from revenue_tracking
     INSERT INTO mustream_schm.payment_distribution (revenue_id, month, ad_revenue, subscription_revenue, total_revenue)
     SELECT revenue_id, month, ad_revenue, subscription_revenue, total_revenue
     FROM mustream_schm.revenue_tracking
@@ -293,20 +291,19 @@ BEGIN
     ON CONFLICT (month) DO NOTHING;
 
 
-    -- Step 2: Generate artist payments (calculate based on distribution)
+    -- 2: generate artist payments (calculate based on distribution)
     PERFORM mustream_schm.generate_artist_payments(v_month);
 
-    -- Step 3: Call procedure to generate all payments (devs, mgmt, artists)
+    -- 3: call procedure to generate all payments (devs, mgmt, artists)
     CALL mustream_schm.generate_all_payments_proc(NEW.month);
 
-    -- Optionally log for auditing purposes
+    -- log for auditing purposes
     INSERT INTO mustream_schm.payment_audit_log (event_type, event_data)
     VALUES ('payment_generation', jsonb_build_object('month', v_month));
 
     RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
-
 
 
 /*new addition tables*/
@@ -334,13 +331,11 @@ FROM mustream_schm.artists a
 JOIN mustream_schm.users u ON a.user_id = u.user_id
 LEFT JOIN mustream_schm.songs s ON a.artist_id = s.artist_id
 LEFT JOIN mustream_schm.genres g ON s.genre_id = g.genre_id;
-/*Execute*/
+/*Execute*/ /*this has been automated*/
 -- SELECT * FROM mustream_schm.artist_discography WHERE artist_name = 'DJ Creator1';
 
 
--- procedure to automate stuff:
-
-/*procedure 1 to automate the artist discography*/
+/*procedure to automate the artist discography*/
 CREATE TABLE mustream_schm.artist_view_log (
     id SERIAL PRIMARY KEY,
     artist_name TEXT NOT NULL,
@@ -406,10 +401,7 @@ COMMIT; /*transaction*/
   its temporary thats why ide is not able to find its origin*/
 SELECT * FROM temp_discography;
 
-
--- triggers
-
-/*trigger 1 upon checking an artist this trigger adds +10 views to the ads in ad_logs*/
+/*trigger upon checking an artist this trigger adds +10 views to the ads in ad_logs*/
 /*row level trigger*/
 CREATE TRIGGER bump_ad_views_on_artist_check
 AFTER INSERT ON mustream_schm.artist_view_log
