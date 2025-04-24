@@ -34,16 +34,16 @@ VALUES
   ('CS114', 'Mobile App Development'),
   ('CS115', 'Game Development');
 
-INSERT INTO UniStud.Teacher (First_Name, Last_Name, Department)
-VALUES
-  ('Dr. Alice', 'Green', 'Computer Science'),
-  ('Dr. Bob', 'Williams', 'Mathematics'),
-  ('Prof. Carol', 'Moore', 'Engineering'),
-  ('Dr. David', 'Taylor', 'Physics'),
-  ('Prof. Emma', 'Lee', 'Computer Science'),
-  ('Dr. Fay', 'Garcia', 'Mathematics'),
-  ('Dr. Grace', 'Harris', 'Engineering'),
-  ('Prof. Henry', 'Clark', 'Computer Science');
+-- INSERT INTO UniStud.Teacher (First_Name, Last_Name, Department)
+-- VALUES
+--   ('Dr. Alice', 'Green', 'Computer Science'),
+--   ('Dr. Bob', 'Williams', 'Mathematics'),
+--   ('Prof. Carol', 'Moore', 'Engineering'),
+--   ('Dr. David', 'Taylor', 'Physics'),
+--   ('Prof. Emma', 'Lee', 'Computer Science'),
+--   ('Dr. Fay', 'Garcia', 'Mathematics'),
+--   ('Dr. Grace', 'Harris', 'Engineering'),
+--   ('Prof. Henry', 'Clark', 'Computer Science');
 
 INSERT INTO UniStud.Course_Teacher (Course_Code, Teacher_ID)
 VALUES
@@ -126,3 +126,67 @@ VALUES
   (3, 3),
   (4, 1),
   (5, 2);
+
+
+INSERT INTO UniStud.Course (Course_Code, Course_Name) VALUES
+('CS101', 'Introduction to Computer Science'),
+('MATH201', 'Calculus II'),
+('BUS105', 'Principles of Management');
+
+INSERT INTO UniStud.Course_Offering (Course_Code, Teacher_ID, Semester_ID, Room, Schedule) VALUES
+('CS101', 1, 1, 'Room 101', 'Mon-Wed 10:00-11:30'),
+('MATH201', 2, 1, 'Room 202', 'Tue-Thu 14:00-15:30'),
+('BUS105', 3, 2, 'Room B1', 'Mon-Wed 12:00-13:30');
+
+INSERT INTO UniStud.Evaluation (RollNo, Course_Code, Evaluation_Type, Score, Max_Score, Evaluation_Date) VALUES
+(1, 'CS101', 'Assignment', 85, 100, '2024-02-15'),
+(1, 'CS101', 'Midterm Exam', 78, 100, '2024-03-15'),
+(1, 'CS101', 'Final Exam', 90, 100, '2024-05-10'),
+(1, 'MATH201', 'Quiz', 18, 20, '2024-02-10'),
+(1, 'MATH201', 'Final Exam', 82, 100, '2024-05-08');
+
+INSERT INTO UniStud.Attendance (RollNo, Course_Code, Attendance_Date, Present) VALUES
+(1, 'CS101', '2024-01-15', TRUE),
+(1, 'CS101', '2024-01-17', FALSE),
+(1, 'CS101', '2024-01-19', TRUE),
+(1, 'MATH201', '2024-01-16', TRUE),
+(1, 'MATH201', '2024-01-18', TRUE);
+
+
+
+INSERT INTO UniStud.Department (Department_Name, Building_Name) VALUES
+('Computer Science', 'Engineering Block A'),
+('Mathematics', 'Science Building'),
+('Physics', 'Lab Complex'),
+('Literature', 'Arts Block'),
+('Business Administration', 'Commerce Wing');
+
+-- Let's pretend Teacher_IDs 1 to 3 exist
+UPDATE UniStud.Teacher SET Department_ID = 1 WHERE Teacher_ID = 1; -- CS
+UPDATE UniStud.Teacher SET Department_ID = 2 WHERE Teacher_ID = 2; -- Math
+UPDATE UniStud.Teacher SET Department_ID = 5 WHERE Teacher_ID = 3; -- Biz Admin
+
+INSERT INTO UniStud.Semester (Year, Term, Start_Date, End_Date) VALUES
+(2024, 'Spring', '2024-01-10', '2024-05-15'),
+(2024, 'Fall', '2024-08-20', '2024-12-15'),
+(2025, 'Spring', '2025-01-15', '2025-05-20');
+
+-- Course: CS101, Teacher: 1, Semester: Spring 2024
+INSERT INTO UniStud.Course_Offering (Course_Code, Teacher_ID, Semester_ID, Room, Schedule) VALUES
+('CS101', 1, 1, 'Room 101', 'Mon-Wed 10:00-11:30'),
+('MATH201', 2, 1, 'Room 202', 'Tue-Thu 14:00-15:30'),
+('BUS105', 3, 2, 'Room B1', 'Mon-Wed 12:00-13:30');
+
+INSERT INTO UniStud.Evaluation (RollNo, Course_Code, Evaluation_Type, Score, Max_Score, Evaluation_Date) VALUES
+(1, 'CS101', 'Assignment', 85, 100, '2024-02-15'),
+(1, 'CS101', 'Midterm Exam', 78, 100, '2024-03-15'),
+(1, 'CS101', 'Final Exam', 90, 100, '2024-05-10'),
+(1, 'MATH201', 'Quiz', 18, 20, '2024-02-10'),
+(1, 'MATH201', 'Final Exam', 82, 100, '2024-05-08');
+
+INSERT INTO UniStud.Attendance (RollNo, Course_Code, Attendance_Date, Present) VALUES
+(1, 'CS101', '2024-01-15', TRUE),
+(1, 'CS101', '2024-01-17', FALSE),
+(1, 'CS101', '2024-01-19', TRUE),
+(1, 'MATH201', '2024-01-16', TRUE),
+(1, 'MATH201', '2024-01-18', TRUE);

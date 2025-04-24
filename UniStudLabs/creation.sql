@@ -125,3 +125,94 @@ $$;
 -- call for procedure
 CALL UniStud.get_student_info_proc(1);
 SELECT * FROM UniStud.student_full_info_view WHERE RollNo = 1;
+
+CREATE TABLE UniStud.Attendance (
+    Attendance_ID SERIAL PRIMARY KEY,
+    RollNo INT REFERENCES UniStud.Student(RollNo) ON DELETE CASCADE,
+    Course_Code VARCHAR(10) REFERENCES UniStud.Course(Course_Code) ON DELETE CASCADE,
+    Attendance_Date DATE NOT NULL,
+    Present BOOLEAN NOT NULL,
+    CHECK (Attendance_Date >= DATE '2000-01-01')
+);
+
+CREATE TABLE UniStud.Evaluation (
+    Evaluation_ID SERIAL PRIMARY KEY,
+    RollNo INT REFERENCES UniStud.Student(RollNo) ON DELETE CASCADE,
+    Course_Code VARCHAR(10) REFERENCES UniStud.Course(Course_Code) ON DELETE CASCADE,
+    Evaluation_Type VARCHAR(50) NOT NULL,  -- e.g., 'Exam', 'Assignment', 'Project'
+    Score DECIMAL(5,2) CHECK (Score BETWEEN 0 AND 100),
+    Max_Score DECIMAL(5,2) CHECK (Max_Score > 0),
+    Evaluation_Date DATE NOT NULL
+);
+
+CREATE TABLE UniStud.Department (
+    Department_ID SERIAL PRIMARY KEY,
+    Department_Name VARCHAR(100) UNIQUE NOT NULL,
+    Building_Name VARCHAR(100)
+);
+
+ALTER TABLE UniStud.Teacher
+    ADD COLUMN Department_ID INT REFERENCES UniStud.Department(Department_ID) ON DELETE SET NULL;
+
+-- Optional: Drop old column
+ALTER TABLE UniStud.Teacher
+    DROP COLUMN Department;
+
+CREATE TABLE UniStud.Semester (
+    Semester_ID SERIAL PRIMARY KEY,
+    Year INT CHECK (Year > 1990),
+    Term VARCHAR(10) CHECK (Term IN ('Spring', 'Summer', 'Fall', 'Winter')),
+    Start_Date DATE NOT NULL,
+    End_Date DATE NOT NULL,
+    UNIQUE (Year, Term)
+);
+
+CREATE TABLE UniStud.Semester (
+    Semester_ID SERIAL PRIMARY KEY,
+    Year INT CHECK (Year > 1990),
+    Term VARCHAR(10) CHECK (Term IN ('Spring', 'Summer', 'Fall', 'Winter')),
+    Start_Date DATE NOT NULL,
+    End_Date DATE NOT NULL,
+    UNIQUE (Year, Term)
+);
+
+CREATE TABLE UniStud.Course_Offering (
+    Offering_ID SERIAL PRIMARY KEY,
+    Course_Code VARCHAR(10) REFERENCES UniStud.Course(Course_Code) ON DELETE CASCADE,
+    Teacher_ID INT REFERENCES UniStud.Teacher(Teacher_ID) ON DELETE SET NULL,
+    Semester_ID INT REFERENCES UniStud.Semester(Semester_ID) ON DELETE CASCADE,
+    Room VARCHAR(50),
+    Schedule VARCHAR(100)
+);
+
+CREATE OR REPLACE VIEW UniStud.student_academic_summary_view AS
+SELECT
+    s.RollNo,
+    s.First_Name,
+    s.Last_Name,
+    c.Course_Name,
+    ev.Evaluation_Type,
+    ev.Score,
+    ev.Max_Score,
+    ROUND((ev.Score / ev.Max_Score) * 100, 2) AS Percentage,
+    sem.Year,
+    sem.Term
+FROM UniStud.Student s
+JOIN UniStud.Evaluation ev ON s.RollNo = ev.RollNo
+JOIN UniStud.Course c ON ev.Course_Code = c.Course_Code
+LEFT JOIN UniStud.Course_Offering co ON co.Course_Code = c.Course_Code
+LEFT JOIN UniStud.Semester sem ON co.Semester_ID = sem.Semester_ID;
+
+CREATE OR REPLACE VIEW UniStud.attendance_summary_view AS
+SELECT
+    s.RollNo,
+    s.First_Name,
+    s.Last_Name,
+    c.Course_Name,
+    COUNT(*) FILTER (WHERE a.Present) AS Days_Present,
+    COUNT(*) AS Total_Classes,
+    ROUND(COUNT(*) FILTER (WHERE a.Present) * 100.0 / COUNT(*), 2) AS Attendance_Percentage
+FROM UniStud.Student s
+JOIN UniStud.Attendance a ON s.RollNo = a.RollNo
+JOIN UniStud.Course c ON a.Course_Code = c.Course_Code
+GROUP BY s.RollNo, c.Course_Name;

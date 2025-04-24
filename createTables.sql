@@ -102,7 +102,6 @@ CREATE TABLE mustream_schm.payment_distribution (
     CONSTRAINT fk_payment_revenue FOREIGN KEY (revenue_id)
         REFERENCES mustream_schm.revenue_tracking(revenue_id) ON DELETE CASCADE
 );
--- rollback ;
 -- delete from mustream_schm.payment_distribution
 -- where distribution_id between 2 and 3;
 ALTER TABLE mustream_schm.payment_distribution
@@ -134,7 +133,6 @@ CREATE TABLE mustream_schm.artist_payments (
         REFERENCES mustream_schm.artists(artist_id) ON DELETE CASCADE
 );
 
--- rollback ;
 -- ALTER TABLE mustream_schm.artist_payments
 -- ADD CONSTRAINT unique_artist_month UNIQUE (artist_id, month);
 
@@ -206,6 +204,7 @@ BEGIN
 
 END;
 $$;
+-- rollback ;
 
 
 /*execute*/
@@ -214,6 +213,7 @@ INSERT INTO mustream_schm.revenue_tracking (month, ad_revenue, subscription_reve
 VALUES ('2025-04-17', 10000.00, 8000.00);
 
 CALL mustream_schm.generate_all_payments_proc('2025-04-17');
+SAVEPOINT payments_v_1;
 COMMIT;/*transaction*/
 
 CREATE OR REPLACE FUNCTION mustream_schm.generate_artist_payments(payment_month DATE)
@@ -391,6 +391,7 @@ BEGIN
     END IF;
 END;
 $$;
+-- rollback ;
 /*execute*/
 BEGIN;
 CALL mustream_schm.get_artist_discography_proc('BeatsByC2', record_count := NULL);
@@ -433,4 +434,3 @@ BEGIN
     RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
-
